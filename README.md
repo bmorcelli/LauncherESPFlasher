@@ -8,7 +8,7 @@
 
 [![GitHub stars](https://img.shields.io/github/stars/bmorcelli/LauncherESPFlasher?style=social)](https://github.com/bmorcelli/LauncherESPFlasher)
 [![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
-[![Version](https://img.shields.io/badge/version-0.0.1--pre-brightgreen)](#installation)
+[![Version](https://img.shields.io/github/v/release/bmorcelli/LauncherESPFlasher)](https://github.com/bmorcelli/LauncherESPFlasher/releases/latest)
 
 </div>
 
@@ -151,12 +151,16 @@ Launcher ESP Flasher is fully keyboard-driven, designed for the CardputerZero ph
 
 ---
 
+</details>
+
 ## Installation
 
 Download the latest `.deb` from the [Releases](https://github.com/bmorcelli/LauncherESPFlasher/releases) page and install it on your CardputerZero:
 
 ```bash
-sudo apt install ./launcherespflasher_<version>.deb
+wget https://github.com/bmorcelli/LauncherESPFlasher/releases/download/0.0.2/launcherespflasher_0.0.2_arm64.deb
+sudo apt install ./launcherespflasher_0.0.2_arm64.deb
+# Open Launcher ESP Flasher from the AppLauncher icon, otherwise it won't work.
 ```
 
 The app will appear automatically in the Launcher app menu.
@@ -185,8 +189,6 @@ If Launcher ESP Flasher saved you time or helped you discover awesome firmwares,
 </div>
 
 You can also **[sponsor this project on GitHub](https://github.com/sponsors/bmorcelli)** — every contribution helps!
-
-</details>
 
 ---
 
