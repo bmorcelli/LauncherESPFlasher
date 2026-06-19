@@ -158,8 +158,8 @@ Launcher ESP Flasher is fully keyboard-driven, designed for the CardputerZero ph
 Download the latest `.deb` from the [Releases](https://github.com/bmorcelli/LauncherESPFlasher/releases) page and install it on your CardputerZero:
 
 ```bash
-wget https://github.com/bmorcelli/LauncherESPFlasher/releases/download/0.0.2/launcherespflasher_0.0.2_arm64.deb
-sudo apt install ./launcherespflasher_0.0.2_arm64.deb
+wget https://github.com/bmorcelli/LauncherESPFlasher/releases/download/0.0.3/launcherespflasher_0.0.3_arm64.deb
+sudo apt install ./launcherespflasher_0.0.3_arm64.deb
 # Open Launcher ESP Flasher from the AppLauncher icon, otherwise it won't work.
 ```
 
