@@ -1,0 +1,17 @@
+list.json
+dev/*
+
+# Build output
+dist/
+
+# Python
+.venv/
+__pycache__/
+*.pyc
+*.pyo
+.pytest_cache/
+
+# Temp files created during flash/cover download
+tmp/
+
+.claude/

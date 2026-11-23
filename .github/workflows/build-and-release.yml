@@ -1,0 +1,189 @@
+name: Build Debian package
+
+on:
+  push:
+    branches:
+      - "**"
+  workflow_dispatch:
+    inputs:
+      store_listing_only:
+        description: "Only update the CardputerZero Store listing (app-builder.json store section, icon, screenshots) — no new .deb"
+        type: boolean
+        default: false
+  release:
+    types: [published]
+
+permissions:
+  contents: write
+
+env:
+  PKG_NAME: launcherespflasher
+  DOCKER_IMAGE_CACHE_DIR: /tmp/docker-image-cache
+
+jobs:
+  build:
+    name: Build arm64 .deb
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout source
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Restore Docker image cache
+        uses: actions/cache@v4
+        with:
+          path: ${{ env.DOCKER_IMAGE_CACHE_DIR }}
+          key: docker-images-${{ runner.os }}-build-env-v1
+          restore-keys: |
+            docker-images-${{ runner.os }}-build-env-
+
+      - name: Load cached Docker images
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p "$DOCKER_IMAGE_CACHE_DIR"
+          if [ -f "$DOCKER_IMAGE_CACHE_DIR/build-env.tar" ]; then
+            docker load -i "$DOCKER_IMAGE_CACHE_DIR/build-env.tar"
+          fi
+          if [ -f "$DOCKER_IMAGE_CACHE_DIR/binfmt.tar" ]; then
+            docker load -i "$DOCKER_IMAGE_CACHE_DIR/binfmt.tar"
+          fi
+
+      - name: Pull Docker images
+        shell: bash
+        run: |
+          set -euo pipefail
+          docker pull tonistiigi/binfmt:latest
+          docker pull ghcr.io/cardputerzero/build-env:latest
+          docker save tonistiigi/binfmt:latest -o "$DOCKER_IMAGE_CACHE_DIR/binfmt.tar"
+          docker save ghcr.io/cardputerzero/build-env:latest -o "$DOCKER_IMAGE_CACHE_DIR/build-env.tar"
+
+      - name: Configure package version
+        id: package_version
+        shell: bash
+        run: |
+          set -euo pipefail
+          # The Store orders versions with `dpkg --compare-versions` and only
+          # accepts a .deb that is strictly newer than the published one.
+          if [ "${{ github.event_name }}" = "release" ]; then
+            tag="${{ github.event.release.tag_name }}"
+            version="${tag#[vV]}"
+            # Debian upstream version: must start with a digit; no '-' (the
+            # revision is appended from PKG_REVISION).
+            if [[ ! "$version" =~ ^[0-9][A-Za-z0-9.+~]*$ ]]; then
+              echo "::error::Release tag '$tag' is not a valid Debian upstream version (expected e.g. 1.2.3 or v1.2.3)"
+              exit 1
+            fi
+            display_version="$version"
+          else
+            # '~' sorts before anything, so dev builds never shadow a release.
+            commit_hash="$(git rev-parse --short=7 HEAD)"
+            version="0~git.${commit_hash}"
+            display_version="$commit_hash"
+          fi
+
+          sed -i -E "s/^PKG_VERSION=.*/PKG_VERSION=\"${version}\"/" packaging/meta.env
+          source packaging/meta.env
+          # Keep app-builder.json identity in sync with the .deb control file.
+          jq --arg v "$version" --arg d "$PKG_DESC" --arg n "$PKG_NAME" \
+            '.version = $v | .description = $d | .package_name = $n' \
+            app-builder.json > app-builder.json.tmp
+          mv app-builder.json.tmp app-builder.json
+          printf 'BUILD_VERSION = "%s"\n' "$display_version" > src/build_info.py
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+          echo "display_version=$display_version" >> "$GITHUB_OUTPUT"
+          grep '^PKG_VERSION=' packaging/meta.env
+          jq '{package_name, version}' app-builder.json
+
+      - name: Install arm64 binfmt
+        shell: bash
+        run: docker run --privileged --rm tonistiigi/binfmt --install arm64
+
+      - name: Build package
+        shell: bash
+        run: bash scripts/build-deb.sh
+
+      - name: Locate built package
+        id: deb
+        shell: bash
+        run: |
+          set -euo pipefail
+          deb_file="$(ls -t dist/*.deb | head -n 1)"
+          deb_name="$(basename "$deb_file")"
+          pkg_version="${deb_name#${PKG_NAME}_}"
+          pkg_version="${pkg_version%_arm64.deb}"
+          echo "file=$deb_file" >> "$GITHUB_OUTPUT"
+          echo "name=$deb_name" >> "$GITHUB_OUTPUT"
+          echo "version=$pkg_version" >> "$GITHUB_OUTPUT"
+          ls -lh "$deb_file"
+
+      - name: Upload build artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ steps.deb.outputs.name }}
+          path: ${{ steps.deb.outputs.file }}
+
+      - name: Upload package to release
+        if: github.event_name == 'release'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG_NAME: ${{ github.event.release.tag_name }}
+          DEB_FILE: ${{ steps.deb.outputs.file }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          # Versioned file plus a fixed-name copy, so the README can link to
+          # releases/latest/download/${PKG_NAME}_arm64.deb without edits.
+          stable="$RUNNER_TEMP/${PKG_NAME}_arm64.deb"
+          cp "$DEB_FILE" "$stable"
+          gh release upload "$TAG_NAME" "$DEB_FILE" "$stable" \
+            --repo "${{ github.repository }}" \
+            --clobber
+
+      - name: Install czdev
+        if: github.event_name == 'release' || inputs.store_listing_only
+        shell: bash
+        run: git clone --depth 1 https://github.com/CardputerZero/AppBuilder.git "$RUNNER_TEMP/appbuilder"
+
+      - name: Configure SSH for czdev git push
+        if: github.event_name == 'release' || inputs.store_listing_only
+        env:
+          SSH_PRIVATE_KEY: ${{ secrets.APPSTORE_SSH_KEY }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p ~/.ssh
+          chmod 700 ~/.ssh
+          printf '%s\n' "$SSH_PRIVATE_KEY" > ~/.ssh/id_ed25519
+          chmod 600 ~/.ssh/id_ed25519
+          ssh-keyscan -t ed25519 github.com >> ~/.ssh/known_hosts 2>/dev/null
+          eval "$(ssh-agent -s)"
+          ssh-add ~/.ssh/id_ed25519
+          echo "SSH_AUTH_SOCK=$SSH_AUTH_SOCK" >> "$GITHUB_ENV"
+          echo "SSH_AGENT_PID=$SSH_AGENT_PID" >> "$GITHUB_ENV"
+
+      - name: Publish to AppStore (czdev)
+        if: github.event_name == 'release' || inputs.store_listing_only
+        env:
+          GH_TOKEN: ${{ secrets.APPSTORE_PR_TOKEN }}
+          DEB_FILE: ${{ steps.deb.outputs.file }}
+          META_ONLY: ${{ github.event_name != 'release' && inputs.store_listing_only }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import json, os, pathlib, stat
+          path = pathlib.Path.home() / ".czdev" / "credentials"
+          path.parent.mkdir(parents=True, exist_ok=True)
+          path.write_text(json.dumps({"github_token": os.environ["GH_TOKEN"]}))
+          path.chmod(stat.S_IRUSR | stat.S_IWUSR)
+          PY
+          # Run from the directory holding app-builder.json, as czdev expects.
+          cd "$GITHUB_WORKSPACE"
+          if [ "$META_ONLY" = "true" ]; then
+            "$RUNNER_TEMP/appbuilder/czdev" publish --meta-only
+          else
+            "$RUNNER_TEMP/appbuilder/czdev" publish --deb "$DEB_FILE"
+          fi
