@@ -5,6 +5,8 @@ import threading
 import time
 from abc import ABC, abstractmethod
 
+from config import CHAR_CTRL_H
+
 try:
     import evdev
     HAS_EVDEV = True
@@ -136,6 +138,8 @@ class EvdevKeyboardBackend(InputBackend):
                                     ch = _SCANCODE_TO_CHAR.get(sc)
                                     if sc == _KEY_BACKSPACE:
                                         self._last_char = '\x08'
+                                    elif ch and self._ctrl_held and ch == 'h':
+                                        self._last_char = CHAR_CTRL_H  # not '\x08' (= backspace)
                                     elif ch:
                                         # Ctrl+letter → control character (e.g. Ctrl+O = \x0f)
                                         self._last_char = chr(ord(ch) & 0x1f) if self._ctrl_held else ch
@@ -250,7 +254,8 @@ class PygameKeyboardBackend(InputBackend):
             elif ctrl and pygame.K_a <= event.key <= pygame.K_z:
                 # Ctrl+letter → control char: K_a=97, chr(97-96)=chr(1)=Ctrl+A
                 # K_o=111, chr(111-96)=chr(15)='\x0f'=Ctrl+O
-                self._last_char   = chr(event.key - 96)
+                self._last_char   = (CHAR_CTRL_H if event.key == pygame.K_h
+                                     else chr(event.key - 96))
                 self._any_pressed = True
             elif event.unicode:
                 self._last_char   = event.unicode

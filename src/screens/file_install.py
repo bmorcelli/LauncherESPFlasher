@@ -695,7 +695,6 @@ def run(input_handler=None):
     # Step 2: browse filesystem for a .bin file
     from screens import file_picker as _fp
     bin_path = _fp.run(
-        start_dir=os.path.expanduser("~"),
         input_handler=input_handler,
         chip_label=label,
     )

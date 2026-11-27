@@ -43,3 +43,7 @@ KEY_UP    = 103
 KEY_LEFT  = 105
 KEY_RIGHT = 106
 KEY_DOWN  = 108
+
+# next_char() values. Backspace is '\x08'; Ctrl+H would naturally be the same
+# ASCII code, so input backends emit this distinct (non-printable) char for it.
+CHAR_CTRL_H    = "\x1f"

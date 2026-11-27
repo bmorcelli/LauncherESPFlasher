@@ -8,6 +8,7 @@ from config import (
     SCREEN_W, SCREEN_H, COLOR_BG, COLOR_GREEN, COLOR_DIM, COLOR_DARK,
     COLOR_GRAY, FONT_PATH, FONT_SIZE_SM, NAVBAR_H,
     KEY_UP, KEY_DOWN, KEY_LEFT, KEY_RIGHT, KEY_ENTER, KEY_ESC, KEY_TAB,
+    CHAR_CTRL_H,
 )
 import icons
 from display import blit
@@ -503,7 +504,7 @@ def _run_once(input_handler):
                 import api as _api
                 _api.refresh_all()
                 return _RELOAD
-            if ch == '\x08' and focus != FOCUS_FILTER:  # Ctrl+H — open guide
+            if ch == CHAR_CTRL_H:  # Ctrl+H — open guide (Backspace is '\x08')
                 from screens import tutorial as _tutorial
                 _tutorial.run(input_handler=input_handler)
                 _refresh()

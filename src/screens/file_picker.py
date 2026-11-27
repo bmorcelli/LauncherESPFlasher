@@ -9,6 +9,7 @@ from config import (
     KEY_UP, KEY_DOWN, KEY_ENTER, KEY_ESC,
 )
 import icons
+import usb_storage
 from display import blit
 from ui import draw_navbar, NAV_BACK
 from ui_hitareas import HitAreaRegistry, drain_pointer_events, handle_tap, ListScroll
@@ -48,13 +49,16 @@ def _list_dir(path):
     return folders, files
 
 
-def _build_items(cwd):
-    """Return list of (label, is_dir, full_path) for current directory."""
+def _build_items_base(cwd, pinned=()):
+    """Return list of (label, is_dir, full_path) for current directory.
+    Folders whose full path is in `pinned` (the ~/USB links) come first."""
     items = []
     parent = os.path.dirname(cwd)
     if parent != cwd:
         items.append(("../", True, parent))
     folders, files = _list_dir(cwd)
+    pinned_here = [f for f in folders if os.path.join(cwd, f) in pinned]
+    folders = pinned_here + [f for f in folders if f not in pinned_here]
     items += [(f + "/", True,  os.path.join(cwd, f)) for f in folders]
     items += [(f,        False, os.path.join(cwd, f)) for f in files]
     return items
@@ -166,12 +170,38 @@ def _draw(cwd, items, selected, offset, chip_label=None, registry=None):
     blit(img)
 
 
+def _draw_status(msg):
+    img  = Image.new("RGB", (SCREEN_W, SCREEN_H), COLOR_BG)
+    draw = ImageDraw.Draw(img)
+    font = _font()
+    draw.rectangle([0, 0, SCREEN_W, HEADER_H], fill=COLOR_DARK)
+    draw.text((6, 4), "FIND FIRMWARE BINARY", fill=COLOR_GREEN, font=font)
+    mw = draw.textbbox((0, 0), msg, font=font)[2]
+    draw.text(((SCREEN_W - mw) // 2, SCREEN_H // 2 - 6), msg, fill=COLOR_DIM, font=font)
+    blit(img)
+
+
 def run(start_dir=None, input_handler=None, chip_label=None):
     """Browse the filesystem for a .bin file.
-    Returns the absolute path of the selected file, or None if cancelled."""
-    cwd = start_dir or os.path.expanduser("~")
+    Returns the absolute path of the selected file, or None if cancelled.
+
+    On every open, USB pendrives / SD-card readers are mounted (if needed)
+    and linked as ~/USB, ~/USB2, ... When no start_dir is given, browsing
+    starts inside the first USB device; leaving it goes to the home folder
+    (the symlink path is never resolved, so its parent is ~)."""
+    home = os.path.expanduser("~")
+    _draw_status("Checking USB storage...")
+    try:
+        usb_links = usb_storage.prepare(home)
+    except Exception:
+        usb_links = []
+
+    cwd = start_dir or (usb_links[0] if usb_links else home)
     if not os.path.isdir(cwd):
-        cwd = os.path.expanduser("~")
+        cwd = home
+
+    def _build_items(path):
+        return _build_items_base(path, usb_links)
 
     items    = _build_items(cwd)
     selected = 0

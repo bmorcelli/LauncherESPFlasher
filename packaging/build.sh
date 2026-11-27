@@ -19,6 +19,7 @@ python3 -m py_compile src/screens/cover_view.py
 python3 -m py_compile src/flasher.py
 python3 -m py_compile src/screens/flash_screen.py
 python3 -m py_compile src/screens/tutorial.py
+python3 -m py_compile src/usb_storage.py
 python3 -m py_compile src/screens/file_picker.py
 python3 -m py_compile src/screens/file_install.py
 echo "Syntax check passed."
